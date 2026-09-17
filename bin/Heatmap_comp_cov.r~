@@ -1,0 +1,151 @@
+rm(list=ls())
+# library(Biostrings ,verbose=FALSE ,warn.conflicts=FALSE, quietly = TRUE)
+library("cowplot",verbose=FALSE ,warn.conflicts=FALSE, quietly = TRUE)
+library(ggplot2 ,verbose=FALSE ,warn.conflicts=FALSE, quietly = TRUE)
+library(Cairo ,verbose=FALSE ,warn.conflicts=FALSE, quietly = TRUE)
+library(RColorBrewer)
+
+args=commandArgs(trailingOnly=TRUE)
+TableName1=args[1]
+TableName2=args[2]
+TableName3=args[3]
+TableName4=args[4]
+out_dir=args[5]
+
+ip1 <- read.table(TableName1,sep="\t",header=FALSE)
+colnames(ip1)<-c("x","y","fill")
+ip2 <- read.table(TableName2,sep="\t",header=FALSE)
+colnames(ip2)<-c("x","y","fill")
+ip3 <- read.table(TableName3,sep="\t",header=FALSE)
+colnames(ip3)<-c("x","y","fill")
+ip4 <- read.table(TableName4,sep="\t",header=FALSE)
+colnames(ip4)<-c("x","y","fill")
+
+Vmax=max(mean(ip1$fill),mean(ip2$fill),mean(ip3$fill),mean(ip4$fill))*2
+Vmin=min(min(ip1$fill),min(ip2$fill),min(ip3$fill),min(ip4$fill))
+
+
+
+
+data_summary <- function(data, varname, groupnames){
+  require(plyr)
+  summary_func <- function(x, col){
+    c(mean = mean(x[[col]], na.rm=TRUE),
+      sd = sd(x[[col]], na.rm=TRUE))
+  }
+  data_sum<-ddply(data, groupnames, .fun=summary_func,
+                  varname)
+  data_sum <- rename(data_sum, c("mean" = varname))
+ return(data_sum)
+}
+
+ip1_meaned <- data_summary(ip1, varname="fill", 
+                    groupnames=c("x"))
+ip2_meaned <- data_summary(ip2, varname="fill", 
+                    groupnames=c("x"))
+ip3_meaned <- data_summary(ip3, varname="fill", 
+                    groupnames=c("x"))
+ip4_meaned <- data_summary(ip4, varname="fill", 
+                    groupnames=c("x"))
+
+ip1$fill[ip1$fill>Vmax]=Vmax
+ip2$fill[ip2$fill>Vmax]=Vmax
+ip3$fill[ip3$fill>Vmax]=Vmax
+ip4$fill[ip4$fill>Vmax]=Vmax
+
+MaxIPpair=max(ip2_meaned$fill,ip4_meaned$fill)
+MaxIPodd=max(ip1_meaned$fill,ip3_meaned$fill)
+
+MinIPpair=min(ip2_meaned$fill,ip4_meaned$fill)
+MinIPodd=min(ip1_meaned$fill,ip3_meaned$fill)
+
+h_ip1 <- ggplot(ip1, aes(x, y, fill=fill)) + 
+geom_tile() + 
+ggtitle("ChIP coverage")+
+theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),axis.title.y=element_blank(),plot.title = element_text(hjust = 0.5)) + 
+scale_fill_gradientn(colors=brewer.pal(n = 9, name = "Reds"),
+limits=c(Vmin,Vmax),guide=FALSE)
+
+p_ip1 <- ggplot(ip1_meaned, aes(x, fill)) + 
+  geom_line()+
+xlab("bp around center of peak")+
+scale_y_continuous(limits=c(MinIPodd,MaxIPodd))+
+theme(axis.title.y=element_blank())
+
+h_ip2 <- ggplot(ip2, aes(x, y, fill=fill)) + 
+geom_tile() + 
+ggtitle("Mnase coverage")+
+theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+		axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),plot.title = element_text(hjust = 0.5)) + 
+scale_fill_gradientn(colors=brewer.pal(n = 9, name = "Reds"),
+limits=c(Vmin,Vmax),guide=FALSE)
+
+p_ip2 <- ggplot(ip2_meaned, aes(x, fill)) + 
+  geom_line() +
+xlab("bp around center of peak")+
+scale_y_continuous(position = "right",limits=c(MinIPpair,MaxIPpair))+
+theme(axis.title.y=element_blank())
+
+h_ip3 <- ggplot(ip3, aes(x, y, fill=fill)) + 
+geom_tile() + 
+ggtitle("ChIP coverage")+
+theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+		axis.title.y=element_blank(),
+,plot.title = element_text(hjust = 0.5)) + 
+scale_fill_gradientn(colors=brewer.pal(n = 9, name = "Reds"),
+limits=c(Vmin,Vmax),guide=FALSE)
+
+p_ip3 <- ggplot(ip3_meaned, aes(x, fill)) + 
+  geom_line() +
+xlab("bp around center of peak")+
+scale_y_continuous(limits=c(MinIPodd,MaxIPodd))+
+theme(axis.title.y=element_blank())
+
+h_ip4 <- ggplot(ip4, aes(x, y, fill=fill)) + 
+geom_tile() + 
+ggtitle("Mnase coverage")+
+theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+		axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),plot.title = element_text(hjust = 0.5)) + 
+scale_fill_gradientn(colors=brewer.pal(n = 9, name = "Reds"),
+limits=c(Vmin,Vmax),guide=FALSE)
+
+p_ip4 <- ggplot(ip4_meaned, aes(x, fill)) + 
+  geom_line() +
+xlab("bp around center of peak")+
+scale_y_continuous(position = "right",limits=c(MinIPpair,MaxIPpair))+
+theme(axis.title.y=element_blank())
+
+Cairo(width = 180, height = 250, file=paste(out_dir,"test_heatmaps.png",sep=""), type="png", pointsize=12, bg = "transparent", canvas = "white", units = "mm", dpi = 400)
+
+# plot_grid(h_ip1, h_ip2, p_ip1, p_ip2, h_ip3, h_ip4, p_ip3, p_ip4, labels=c("A", "B","","","","","",""), ncol = 2, nrow = 4)
+
+ggdraw() +
+  draw_plot(h_ip1, 0, 0.7, 0.5, 0.3) +
+  draw_plot(p_ip1, 0, 0.5, 0.5, 0.2) +
+  draw_plot(h_ip2, 0.5, 0.7, 0.5, 0.3) +
+  draw_plot(p_ip2, 0.5, 0.5, 0.5, 0.2) +
+
+  draw_plot(h_ip3, 0, 0.2, 0.5, 0.3) +
+  draw_plot(p_ip3, 0, 0, 0.5, 0.2) +
+
+  draw_plot(h_ip4, 0.5, 0.2, 0.5, 0.3) +
+  draw_plot(p_ip4, 0.5, 0, 0.5, 0.2)
+
+dev.off()
+
+
+
+#   draw_plot_label(c("A", "B", "C"), c(0, 0, 0.5), c(1, 0.5, 0.5), size = 15)
+
