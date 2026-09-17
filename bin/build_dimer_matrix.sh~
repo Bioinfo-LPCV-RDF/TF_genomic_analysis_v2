@@ -1,0 +1,94 @@
+#!/bin/bash
+
+# Script: dimer_matrix_generator.sh
+# ==================================
+#
+# DESCRIPTION:
+#   This script generates a  matrix as a dimer based on the specified dimer type (ER, IR, or DR) and spacing/offset
+#   parameters.
+#
+# USAGE:
+#   dimer_matrix_generator.sh <matrix_file> <name_matrix> <spacing> <dimer_type> <offset_left> <offset_right>
+#
+# Arguments:
+#   matrix_file   : Path to the monomer PFM file (tab-delimited, 4 columns: A C G T)
+#   name_matrix   : Name of the generated dimer matrix
+#   spacing       : Number of positions to insert between monomers
+#   dimer_type    : Type of dimer to generate:
+#                     ER : Everted Repeat (<-->)
+#                     IR : Inverted Repeat (-> <-)
+#                     DR : Direct Repeat (-> ->)
+#   offset_left   : Left offset to adjust spacing
+#   offset_right  : Right offset to adjust spacing
+#
+# NOTES:
+#   - The script automatically adjusts the spacing depending on the dimer type.
+#   - Positions inserted between monomers are filled with "1" to indicate uniform probability.
+
+# LOAD ARGUMENTS
+matrix=$1
+name_matrix=$2
+spacing=$3
+dimer_type=$4
+offset_left=$5
+offset_right=$6
+
+calc(){
+awk "BEGIN { print "$*" }";
+}
+
+# VALIDATE INPUTS
+if [ -z $dimer_type ]
+then
+    echo "[ERROR] - Dimer type is either ER, IR, DR">&2
+    exit 1
+fi
+
+# INITIATE HEADER FOR OUTPUT MATRIX
+header="MATRIX COUNT SYMMETRIC $name_matrix SIMPLE\nA\tC\tG\tT"
+
+if [ $dimer_type == "IR" ] #-> <- IR
+then
+    spacing=$(calc $spacing-2*$offset_right)
+    pfm_mono=$(tail -n +3 $matrix)
+    echo -e "$header"
+    echo -e "$pfm_mono"
+    for i in `seq 1 $spacing`
+    do
+	echo -e "1\t1\t1\t1"
+    done
+    echo -e "$pfm_mono" | tac | awk -v OFS="\t" '{print $4,$3,$2,$1}'
+    
+elif [ $dimer_type == "DR" ] # ->-> DR
+    then
+    spacing=$(calc $spacing-$offset_right-$offset_left)
+    header="MATRIX COUNT SIMPLE $name_matrix SIMPLE\nA\tC\tG\tT"
+    pfm_mono=$(tail -n +3 $matrix)
+    echo -e "$header"
+    echo -e "$pfm_mono"
+    for i in `seq 1 $spacing`
+    do
+	echo -e "1\t1\t1\t1"
+    done
+    echo -e "$pfm_mono" | cat | awk -v OFS="\t" '{print $1,$2,$3,$4}'
+    
+
+elif [ $dimer_type == "ER" ] # ER <-->
+    then
+    spacing=$(calc $spacing-2*$offset_left)
+    pfm_mono=$(tail -n +3 $matrix)
+    echo -e "$header"
+    echo -e "$pfm_mono" | tac | awk -v OFS="\t" '{print $4,$3,$2,$1}'
+    for i in `seq 1 $spacing`
+    do
+	echo -e "1\t1\t1\t1"
+    done
+    echo -e "$pfm_mono"
+
+echo "$Spacing" >&2
+else
+    echo "[ERROR] - Incorrect dimer type specified (ER,IR,DR)" >&2
+    exit 1
+fi
+
+exit 0
