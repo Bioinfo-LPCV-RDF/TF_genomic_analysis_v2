@@ -155,3 +155,6 @@ methMap=/home/312.6-Flo_Re/312.6.1-Commun/data/Methylation_maps/Zhu_lab_PNAS_201
 full_methylation=$BIN_DIR/full_methylation.py
 plot_meth_full=$BIN_DIR/plot_meth_full.R
 figs_meth_violin=$BIN_DIR/figs_meth_violin.R
+
+# ---------- annotate_peaks
+PlotFeatureAnnotation=$BIN_DIR/PlotFeatureAnnotation.R

@@ -1180,6 +1180,27 @@ general infos: From peaks coverage file and for a given matrix, this function
                          Scores_Distribution folder. (default:
                          null)
 \n";;
+    annotate_peaks)
+    echo -e "
+==========
+usage: annotate_peaks -f <FILE> -g <FILE> -o <PATH> -p <INT> -c <STRING> 
+       -gff <FILE>
+
+general infos: Annotates peaks from a bed file with the closest gene and its
+               distance to the peak. The annotation is based on a provided GFF3
+               file of the genome.
+
+-- Mandatory arguments:
+    -f      FILE    :    Peaks file in bed format to be annotated.
+    -g      FILE    :    Genome FASTA file corresponding to the peaks.
+    -gff    FILE    :    GFF3 file containing gene annotations for the genome.
+    -o      PATH    :    Set the Output directory where results will be stored.
+-- optional arguments :
+    -p      INT     :    Set the number of bp to consider for promoter region. 
+                         (default: 1000)
+    -c      STRING  :    Set the color for the output plots. 
+                         (default: \"black\")
+    \n";;
 	*)
 echo -e "
 usage: call one of the function below to see more details about this specific
@@ -1280,7 +1301,9 @@ cooking_meth            :  Assess the effect of methylcytosines on the
                            in the bound region, in the best TFBS and at each
                            position in the best TFBS. As described in Lai et 
                            al 2021 Molecular Plant 2021.
-
+annotate_peaks           :  Annotates peaks from a bed file with the closest
+                           gene and its distance to the peak. The annotation is
+                           based on a provided GFF3 file of the genome.
 created by Stigliani A. ; Lucas J. ; Blanc-Mathieu R. ; Parcy F.
 assembled by Lucas J. ; Jegou A. ; Blanc-Mathieu R.
 \n";;

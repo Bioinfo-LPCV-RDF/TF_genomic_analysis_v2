@@ -1073,7 +1073,7 @@ peakcalling_GOPeaks(){
             $PATH_TO_SAMTOOLS/samtools merge --threads $(calc ${threads}-1) -b listbams.txt control.bam
         fi
     fi
-    if [ ! -f $out_dir/controls/control.bam.bai ]; then
+    if [ ! -f $out_dir/controls/control.bam.bai ]&& [ ${#controls[@]} -gt 0 ]; then
 		echo "[INFO] - Indexing control bam" | tee -a $log
         $PATH_TO_SAMTOOLS/samtools index $out_dir/controls/control.bam 
     fi
@@ -1105,7 +1105,11 @@ peakcalling_GOPeaks(){
     done
     cd $out_dir
 	echo "[INFO] - Starting GOPeaks" | tee -a $log
-    conda run -n order_66 gopeaks -p 1e-100 -m 20 -w $phs -b $out_dir/replicates/replicate.bam -c $out_dir/controls/control.bam -o $out_dir/${in_dir##*/} -s $sizeFile
+	if [ ${#controls[@]} -eq 0 ]; then
+		gopeaks -p 1e-100 -m 20 -w $phs -b $out_dir/replicates/replicate.bam -o $out_dir/${in_dir##*/} -s $sizeFile
+	else
+    	gopeaks -p 1e-100 -m 20 -w $phs -b $out_dir/replicates/replicate.bam -c $out_dir/controls/control.bam -o $out_dir/${in_dir##*/} -s $sizeFile
+	fi
 
     if [ ${R2_value} != "NA" ]; then
         # PE dataset
@@ -1179,6 +1183,7 @@ peakcalling_GOPeaks(){
         } id_old=id
     } END{print ch,pss,pts,max,pos}' peaks_tmp.bed  > $out_dir/${in_dir##*/}_max_peaks.bed
     # cat $out_dir/${in_dir##*/}_max_peaks.bed >> all_pics_tmp.bed
+	awk -v OFS="\t" '{print $1,$2,$3}' $out_dir/${in_dir##*/}_max_peaks.bed > $out_dir/${in_dir##*/}_narrow.bed
 	# removing temporary folders
     rm $out_dir/peaks_tmp.bed
 	rm -R $out_dir/controls;
@@ -1399,6 +1404,37 @@ main_peakcalling(){
 			list_bdg+=("$out_dir/$name/${name}_cov.bdg")
 			peakcalling_GOPeaks -id $dir -od $out_dir -phs $phs -t $threads -size $sizeFile -s $seedrandom
 			cat $out_dir/$name/${name}_max_peaks.bed | tee -a $out_dir/$name_cons/temp/all_pics_tmp.bed
+
+
+			echo "[INFO] - Computing FRiP and other stats" | tee -a $out_dir/$name_cons/log.txt
+			for elt in ${bam_ech[@]};
+			do
+				if [ ! -f $out_dir/$name/${name}_stats.txt ] || [[ $out_dir/$name/${name}_peaks.bed -nt $out_dir/$name/${name}_stats.txt ]]; then # checking if this step is already done to not do it again
+					if [[ $elt != *"control"* ]]; then # filter out all bam that contain control in his name.
+						# computing Fresquency of Reads in Peaks (FRiP)
+						total=$(samtools view -c $elt)
+						inpeak=$(bedtools sort -i $out_dir/$name/${name}_peaks.bed | bedtools merge -i stdin | bedtools intersect -u -a $elt -b stdin -ubam | samtools view -c)
+						FRIP=$(calc $inpeak/$total*100)
+						echo "$name $FRIP% $inpeak / $total" | tee -a $out_dir/$name_cons/log.txt
+						echo "$name $FRIP% $inpeak / $total" > $out_dir/$name/${name}_FreqReadInPeak.txt
+						echo "[INFO] - Computing total tags, filtered tags and filtered peaks" | tee -a $out_dir/$name_cons/log.txt
+						R2_value=$(awk -v FS=" " 'NR>1{print $2}' ${elt%.filtered.sorted.bam}.minimal.stats)
+						echo "[INFO] - R2_value: $R2_value" | tee -a $out_dir/$name_cons/log.txt
+						if [ $R2_value == "NA" ]; then # number of tags/fragments, way of retrieving this info is PE/SE dependant
+							echo "[ERROR] - R2_value is NA, this should not happen with GOPeaks, please check your bam files" | tee -a $out_dir/$name_cons/log.txt
+						fi
+						if [ $R2_value != "NA" ]; then
+							totTags=$(awk 'NR>1{print $2}' $out_dir/$name/metrics.txt )
+							filtTags=$totTags
+						fi
+						echo "[INFO] - Computing number of filtered peaks" | tee -a $out_dir/$name_cons/log.txt
+						filtPeaks=$(wc -l $out_dir/$name/${name}_peaks.bed | cut -d " " -f 1)
+						echo "Sample totalTags filtTags filtPeaks FRIP" > $out_dir/$name/${name}_stats.txt
+						echo $name $totTags $filtTags $filtPeaks $FRIP >> $out_dir/$name/${name}_stats.txt
+					fi
+				fi
+			done
+
 
 		# ------- MACS3
 		elif [ $peakcaller == "MACS3" ]; then
@@ -6018,5 +6054,79 @@ cons_scores(){
 	# 		conda run -n LFYUFO_figs Rscript $plot_scores_prog -n ${filename}_shuffled -i $outdir -o $outdir -e $extend
 		fi
 	fi
+
+}
+
+
+#-------------------------------------------------------------------------------
+annotate_peaks(){
+	# FUNCTION: Annotate peaks with genomic features (gene, promoter, TE, intergenic, etc) using bedtools intersect and a gff or bed annotation file.
+	# USAGE: annotate_peaks -f <FILE> -o <PATH> -g <FILE> -gff <FILE> -p <INT> -c <STRING>
+	# ARGUMENTS:
+	# 	-f: 	Input peak file in bed format.
+	# 	-o: 	Output directory where results will be stored.
+	# 	-g: 	FASTA of the genome. Default: /home/312.6-Flo_Re/312.6.1-Commun/data/tair10.fas
+	# 	-gff: 	GFF annotation file. Default: /home/312.6-Flo_Re/312.6.1-Commun/data/tair10.gff
+	# 	-p: 	Promoter length in bp. Default: 3000
+	# 	-c: 	Color for plot. Default: black
+
+	local genome="/home/312.6-Flo_Re/312.6.1-Commun/data/tair10.fas"; local gff="/home/312.6-Flo_Re/312.6.1-Commun/data/tair10.gff"; local promoter=3000; local color="black"
+	while [ $# -ge 1 ] && [[ -n $1 ]] && [[ $1 != "\n" ]] ; do
+		case $1 in
+			-f)
+				local filein=$2
+				echo "-> Input peak file: ${2}";shift 2;;
+			-o)
+				local outdir=$2
+				echo "-> Output directory set to: ${2}";shift 2;;
+			-g)
+				local genome=$2
+				echo "-> Genome fasta file: ${2}";shift 2;;
+			-gff)
+				local gff=$2
+				echo "-> Gff annotation file: ${2}";shift 2;;
+			-p)
+				local promoter=$2
+				echo "-> Promoter length: ${2}";shift 2;;
+			-c)
+				local color=$2
+				echo "-> Color for plot: ${2}";shift 2;;
+			*)
+				echo "Error in arguments"
+				echo $1; usage annotate_peaks; exit;;
+		esac
+	done
+
+	#check if faile exists for genome fasta, if not create it
+	if [[ ! -f ${genome}.fai ]]; then
+		samtools faidx $genome
+	fi
+	mkdir -p -m 774 $outdir
+	Faifile=${genome}.fai
+	#check if gff is .gff or .bed (gff or annot file)
+	if [[ $gff == *".gff"* ]]; then
+		echo "gff file detected, converting to bed..."
+		if [[ ! -f $(basename $genome).bed ]]; then
+			prep_annotation -n $gff -p $promoter -g $genome -s $Faifile -o $outdir/Genome_annotation.bed
+			annotation=$outdir/Genome_annotation.bed # col1: chr, col2: start, col3: end, col4: feature type (gene, promoter, TE, intergenic, etc)
+		else
+			annotation=$(basename $genome).bed
+		fi
+		
+	else
+		echo "bed file detected, using it as annotation..."
+		annotation=$gff # col1: chr, col2: start, col3: end, col4: feature type (gene, promoter, TE, intergenic, etc)
+	fi
+
+	local Errors=0
+	if [ -z $filein ]; then echo "ERROR: -f argument needed";Errors+=1;fi
+	if [ -z $outdir ]; then echo "ERROR: -o argument needed";Errors+=1;fi
+	name=$(basename $filein .bed)
+	
+
+	bedtools intersect -a $filein -b $annotation -wao | awk -v OFS="\t" '{print $1,$2,$3,$(NF-1),$NF}' | sort -k1,1 -k2,2n -k5,5nr | awk -v OFS="\t" '!seen[$1":"$2"-"$3]++{print $1,$2,$3,$4}' | sort -k1,1 -k2,2n > $outdir/${name}_feature_annotation.tsv	
+	
+	Rscript $PlotFeatureAnnotation -t $outdir/${name}_feature_annotation.tsv -n $name -od $outdir/ -c ${color}
+
 
 }
